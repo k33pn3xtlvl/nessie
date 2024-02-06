@@ -75,6 +75,7 @@ type Nessus interface {
 	EditFolder(folderID int64, newName string) error
 	DeleteFolder(folderID int64) error
 
+	ExportScanWithVulnFilter(scanID int64, format string, filters []ExportScanFilter, filtersOperator string) (int64, error)
 	ExportScan(scanID int64, format string) (int64, error)
 	ExportFinished(scanID, exportID int64) (bool, error)
 	DownloadExport(scanID, exportID int64) ([]byte, error)
@@ -869,6 +870,52 @@ func (n *nessusImpl) ExportScan(scanID int64, format string) (int64, error) {
 
 	req := exportScanRequest{Format: format}
 	resp, err := n.Request("POST", fmt.Sprintf("/scans/%d/export", scanID), req, []int{http.StatusOK})
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	reply := &exportScanResp{}
+	if err = json.NewDecoder(resp.Body).Decode(&reply); err != nil {
+		return 0, err
+	}
+	return reply.File, nil
+}
+
+// ExportScanWithVulnFilter exports a scan to a File resource with vulnerabilities filter.
+// Default filter operator is "and"
+// Call ExportStatus to get the status of the export and call Download() to download the actual file.
+func (n *nessusImpl) ExportScanWithVulnFilter(scanID int64, format string, filters []ExportScanFilter, filtersOperator string) (int64, error) {
+	if n.verbose {
+		log.Println("Exporting scan...")
+	}
+
+	switch {
+	case filtersOperator == "":
+		filtersOperator = "and"
+	case filtersOperator == "and":
+		break
+	case filtersOperator == "or":
+		break
+	default:
+		return 0, fmt.Errorf("Filter operator unknown")
+	}
+
+	/* create
+	filter.0.xy
+	...
+	filter.7.xy
+	*/
+	customJson := make(map[string]interface{})
+	for i, f := range filters {
+		key := fmt.Sprintf("filter.%d.", i)
+		customJson[key+"quality"] = f.Quality
+		customJson[key+"filter"] = f.Filter
+		customJson[key+"value"] = f.Value
+	}
+	customJson["filter.search_type"] = "and"
+	customJson["format"] = format
+
+	resp, err := n.Request("POST", fmt.Sprintf("/scans/%d/export", scanID), customJson, []int{http.StatusOK})
 	if err != nil {
 		return 0, err
 	}

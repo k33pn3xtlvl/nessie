@@ -59,8 +59,17 @@ type editFolderRequest struct {
 	Name string `json:"name"`
 }
 
+type ExportScanFilter struct {
+	Quality string      `json:"quality"`
+	Filter  string      `json:"filter"`
+	Value   interface{} `json:"value"`
+}
+
 type exportScanRequest struct {
-	Format string `json:"format"`
+	Filters []ExportScanFilter `json:"filter"`
+	// The type of search to be used (and | or)
+	SearchType string `json:"filter.search_type"`
+	Format     string `json:"format"`
 }
 
 type createGroupRequest struct {
